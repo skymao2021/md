@@ -93,7 +93,7 @@
     "ohash": "^2.0.11",
     "postcss": "^8.5.1",
     "rollup": "^4.52.3",
-    "rollup-plugin-visualizer": "^6.0.4",
+    "rollup-plugin-visualizer": "^7.0.1",
     "shx": "^0.4.0",
     "tailwindcss": "^4.1.14",
     "unplugin-auto-import": "^20.2.0",
