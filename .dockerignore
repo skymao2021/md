@@ -1,0 +1,12 @@
+.git
+.github
+.vscode
+.idea
+node_modules
+**/node_modules
+.pnpm-store
+**/.pnpm-store
+apps/web/.output
+apps/web/dist
+*.log
+.DS_Store
