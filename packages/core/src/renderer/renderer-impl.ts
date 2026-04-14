@@ -452,7 +452,7 @@ export function initRenderer(opts: IOpts): RendererAPI {
     parseFrontMatterAndContent,
     buildReadingTime,
     createContainer(content: string) {
-      return styledContent(`container`, content, `section`)
+      return styledContent(`container`, content, `div`)
     },
     getOpts,
   }

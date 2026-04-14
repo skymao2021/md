@@ -239,12 +239,16 @@ export function solveWeChatImage() {
   const images = clipboardDiv.getElementsByTagName(`img`)
 
   Array.from(images).forEach((image) => {
-    const width = image.getAttribute(`width`)!
-    const height = image.getAttribute(`height`)!
+    const width = image.getAttribute(`width`)
+    const height = image.getAttribute(`height`)
     image.removeAttribute(`width`)
     image.removeAttribute(`height`)
-    image.style.width = width
-    image.style.height = height
+    if (width) {
+      image.style.width = /^\d+(\.\d+)?$/.test(width) ? `${width}px` : width
+    }
+    if (height) {
+      image.style.height = /^\d+(\.\d+)?$/.test(height) ? `${height}px` : height
+    }
   })
 }
 
@@ -335,15 +339,15 @@ export async function processClipboardContent(primaryColor: string) {
     const parent = node.parentElement!
     const xmlns = parent.getAttribute(`xmlns`)!
     const style = parent.getAttribute(`style`)!
-    const section = document.createElement(`section`)
-    section.setAttribute(`xmlns`, xmlns)
-    section.setAttribute(`style`, style)
-    section.innerHTML = parent.innerHTML
+    const wrapper = document.createElement(`div`)
+    wrapper.setAttribute(`xmlns`, xmlns)
+    wrapper.setAttribute(`style`, style)
+    wrapper.innerHTML = parent.innerHTML
 
     const grand = parent.parentElement!
     // 清空父元素
     grand.innerHTML = ``
-    grand.appendChild(section)
+    grand.appendChild(wrapper)
   })
 
   // fix: mermaid 部分文本颜色被 stroke 覆盖

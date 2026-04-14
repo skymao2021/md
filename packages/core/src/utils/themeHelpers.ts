@@ -93,5 +93,11 @@ export function customCssWithTemplate(jsonString: Partial<Record<Block | Inline,
  * @returns CSS 字符串
  */
 export function getStyleString(style: ExtendedProperties): string {
-  return Object.entries(style ?? {}).map(([key, value]) => `${key}: ${value}`).join(`; `)
+  return Object.entries(style ?? {})
+    .filter(([, value]) => value != null)
+    .map(([key, value]) => {
+      const normalizedValue = String(value).replace(/"/g, `'`)
+      return `${key}: ${normalizedValue}`
+    })
+    .join(`; `)
 }
