@@ -8,7 +8,9 @@ RUN corepack enable && corepack prepare pnpm@10.18.3 --activate
 COPY . .
 
 # Build web assets from current local source (includes your custom Word import changes)
-RUN pnpm install --frozen-lockfile=false --ignore-scripts
+RUN find . -name ".npmrc" -type f -exec sed -i 's#https://registry.npmmirror.com#https://registry.npmjs.org#g' {} + \
+  && pnpm config set registry https://registry.npmjs.org \
+  && pnpm install --lockfile=false --ignore-scripts
 RUN pnpm --filter @md/web build:only
 
 FROM nginx:1.27-alpine

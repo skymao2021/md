@@ -106,12 +106,27 @@ async function ghFileUpload(content: string, filename: string) {
       message: `Upload by ${window.location.href}`,
     },
   })
-  const githubResourceUrl = `raw.githubusercontent.com/${username}/${repo}/${branch}/`
+  const rawResourcePath = `raw.githubusercontent.com/${username}/${repo}/${branch}/`
+  const rawResourceHttps = `https://${rawResourcePath}`
+  const rawResourceHttp = `http://${rawResourcePath}`
   const cdnResourceUrl = `https://fastly.jsdelivr.net/gh/${username}/${repo}@${branch}/`
   res.content = res.data?.content || res.content
-  return useDefault
-    ? res.content.download_url.replace(githubResourceUrl, cdnResourceUrl)
-    : res.content.download_url
+  if (!useDefault) {
+    return res.content.download_url
+  }
+
+  const downloadUrl = res.content.download_url
+  if (downloadUrl.startsWith(rawResourceHttps)) {
+    return `${cdnResourceUrl}${downloadUrl.slice(rawResourceHttps.length)}`
+  }
+  if (downloadUrl.startsWith(rawResourceHttp)) {
+    return `${cdnResourceUrl}${downloadUrl.slice(rawResourceHttp.length)}`
+  }
+  if (downloadUrl.startsWith(rawResourcePath)) {
+    return `${cdnResourceUrl}${downloadUrl.slice(rawResourcePath.length)}`
+  }
+
+  return downloadUrl
 }
 
 // -----------------------------------------------------------------------
