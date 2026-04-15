@@ -39,6 +39,8 @@ Primary file: `apps/web/src/composables/index.ts`
    - image paragraph margin bottom `8px`
    - image block no extra top/bottom blank line
 7. Convert figure captions (`图源/图注/来源/数据来源`) to centered caption with paragraph bottom `8px`.
+8. Upload embedded Word images before final import, and retry each image upload on transient failure.
+9. If any embedded image still remains as `data:` after upload attempts, abort the whole import instead of inserting mixed content into the editor.
 
 ### Step 3: Short-title icon blocks
 Primary file: `apps/web/src/composables/index.ts`
@@ -81,6 +83,7 @@ After a Word import, verify all items:
 3. Image and caption spacing is stable (paragraph bottom `8px`).
 4. Short-title icon remains `60x60`, and aligns with subtitle after WeChat paste.
 5. No extra `/md` suffix required for local URL when current `vite base` is `/`.
+6. Word import never leaves mixed image sources in one article: either all embedded images become remote URLs, or the import is blocked with an error.
 
 ## File references in this skill
 - CSS template: `references/current-theme.css`

@@ -4,6 +4,8 @@ import { fileUpload } from '@/utils/file'
 
 const SHORT_TITLE_ICON_BASE_URL = `https://raw.githubusercontent.com/skymao2021/oss/master/uPic`
 const SHORT_TITLE_MAX_LENGTH = 80
+const WORD_IMAGE_UPLOAD_RETRY_LIMIT = 3
+const WORD_IMAGE_UPLOAD_RETRY_DELAY_MS = 600
 
 const CHINESE_NUMERAL_MAP: Record<string, number> = {
   一: 1,
@@ -147,37 +149,65 @@ function normalizeImageUrl(url: string) {
   return normalized
 }
 
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function uploadWordImageWithRetry(file: File) {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= WORD_IMAGE_UPLOAD_RETRY_LIMIT; attempt++) {
+    try {
+      const base64Content = await toBase64(file)
+      const url = await fileUpload(base64Content, file)
+      return normalizeImageUrl(url)
+    }
+    catch (error) {
+      lastError = error
+      if (attempt < WORD_IMAGE_UPLOAD_RETRY_LIMIT) {
+        await wait(WORD_IMAGE_UPLOAD_RETRY_DELAY_MS * attempt)
+      }
+    }
+  }
+
+  throw lastError
+}
+
 async function uploadWordImages(html: string): Promise<{
   html: string
+  totalEmbeddedCount: number
   uploadedCount: number
   failedCount: number
+  remainingDataCount: number
 }> {
   const parser = new DOMParser()
   const document = parser.parseFromString(html, `text/html`)
   const images = Array.from(document.body.querySelectorAll(`img`))
   if (images.length === 0) {
-    return { html, uploadedCount: 0, failedCount: 0 }
+    return {
+      html,
+      totalEmbeddedCount: 0,
+      uploadedCount: 0,
+      failedCount: 0,
+      remainingDataCount: 0,
+    }
   }
 
+  const embeddedImages = images.filter(image => (image.getAttribute(`src`)?.trim() || ``).startsWith(`data:`))
   let uploadedCount = 0
   let failedCount = 0
 
-  for (let index = 0; index < images.length; index++) {
-    const image = images[index]
+  for (let index = 0; index < embeddedImages.length; index++) {
+    const image = embeddedImages[index]
     const src = image.getAttribute(`src`)?.trim() || ``
-    if (!src.startsWith(`data:`)) {
-      continue
-    }
-
     const imageFile = dataUrlToFile(src, `word-import-${Date.now()}-${index + 1}`)
     if (!imageFile) {
       continue
     }
 
     try {
-      const base64Content = await toBase64(imageFile)
-      const url = await fileUpload(base64Content, imageFile)
-      image.setAttribute(`src`, normalizeImageUrl(url))
+      const url = await uploadWordImageWithRetry(imageFile)
+      image.setAttribute(`src`, url)
       uploadedCount++
     }
     catch (error) {
@@ -186,10 +216,17 @@ async function uploadWordImages(html: string): Promise<{
     }
   }
 
+  const remainingDataCount = Array
+    .from(document.body.querySelectorAll(`img`))
+    .filter(image => (image.getAttribute(`src`)?.trim() || ``).startsWith(`data:`))
+    .length
+
   return {
     html: document.body.innerHTML,
+    totalEmbeddedCount: embeddedImages.length,
     uploadedCount,
     failedCount,
+    remainingDataCount,
   }
 }
 
@@ -550,12 +587,15 @@ export function useImportWordContent() {
         )
 
         const uploadResult = await uploadWordImages(result.value)
+        if (uploadResult.remainingDataCount > 0) {
+          toast.error(
+            `Word 图片上传未完成：共 ${uploadResult.totalEmbeddedCount} 张，成功 ${uploadResult.uploadedCount} 张，失败 ${uploadResult.failedCount} 张。为避免混入 data 图片，本次未导入，请重试或检查图床配置。`,
+          )
+          return
+        }
+
         const content = normalizeWordHtml(uploadResult.html)
         replaceEditorContent(content)
-
-        if (uploadResult.failedCount > 0) {
-          toast.warning(`Word 图片上传：成功 ${uploadResult.uploadedCount} 张，失败 ${uploadResult.failedCount} 张，请检查图床配置`)
-        }
         toast.success(`Word 文档导入成功`)
       }
       catch (error) {

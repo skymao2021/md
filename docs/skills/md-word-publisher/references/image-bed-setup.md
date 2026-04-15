@@ -16,8 +16,9 @@ Use this checklist when configuring image hosting in doocs/md.
    - Correct: `https://xxx...`
    - Wrong: `https://https://xxx...`
 5. Import a Word file with images and verify images are visible in editor preview.
-6. Copy result into WeChat editor and verify image still renders.
-7. Save project config via `文件 -> 导入/导出项目配置` for backup.
+6. Verify the imported result contains no `data:` image sources. If any embedded image upload fails, the import should be blocked instead of leaving mixed sources.
+7. Copy result into WeChat editor and verify image still renders.
+8. Save project config via `文件 -> 导入/导出项目配置` for backup.
 
 ## GitHub notes
 - GitHub upload uses repo API and can return `download_url`.
@@ -29,6 +30,7 @@ Use this checklist when configuring image hosting in doocs/md.
   1. Check 图床配置是否保存成功。
   2. Check URL produced by uploader is directly openable.
   3. Check URL is not malformed (`https://https://...`).
+  4. If the import is blocked, treat it as expected protection against mixed `data:` + remote image sources and fix the upload path first.
 - Images shown in editor but broken in WeChat:
   1. Check host accessibility in WeChat network.
   2. Change to a host that WeChat can access more reliably.
