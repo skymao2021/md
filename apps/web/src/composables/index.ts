@@ -1,3 +1,4 @@
+import JSZip from 'jszip'
 import * as mammoth from 'mammoth'
 import { toBase64 } from '@/utils'
 import { fileUpload } from '@/utils/file'
@@ -69,8 +70,8 @@ function normalizeBlockText(text: string) {
 function stripWordStyleFragments(input: string) {
   let output = input
   const markers = [`<section`, `&lt;section`]
-  const styleKeywordPattern = /(pingfangsc|word-break|word-wrap|letter-spacing|font-size|line-height|overflow-x|text-align|font-family|rgb\(|margin-|padding)/i
-  const cjkPattern = /[\u3400-\u9fff]/u
+  const styleKeywordPattern = /pingfangsc|word-break|word-wrap|letter-spacing|font-size|line-height|overflow-x|text-align|font-family|rgb\(|margin-|padding/i
+  const cjkPattern = /[\u3400-\u9FFF]/u
 
   markers.forEach((marker) => {
     let lower = output.toLowerCase()
@@ -147,6 +148,36 @@ function normalizeImageUrl(url: string) {
     return `https://${normalized}`
   }
   return normalized
+}
+
+async function normalizeDocxLineBreaks(arrayBuffer: ArrayBuffer, filename: string) {
+  if (!filename.toLowerCase().endsWith(`.docx`)) {
+    return arrayBuffer
+  }
+
+  try {
+    const zip = await JSZip.loadAsync(arrayBuffer)
+    const documentXmlFile = zip.file(`word/document.xml`)
+    if (!documentXmlFile) {
+      return arrayBuffer
+    }
+
+    const documentXml = await documentXmlFile.async(`string`)
+    const normalizedDocumentXml = documentXml
+      .replace(/<w:cr\b([^>]*)\/>/g, `<w:br$1/>`)
+      .replace(/<w:cr\b[^>]*>\s*<\/w:cr>/g, `<w:br/>`)
+
+    if (normalizedDocumentXml === documentXml) {
+      return arrayBuffer
+    }
+
+    zip.file(`word/document.xml`, normalizedDocumentXml)
+    return await zip.generateAsync({ type: `arraybuffer` })
+  }
+  catch (error) {
+    console.warn(`DOCX 换行预处理失败，将继续使用原始文件`, error)
+    return arrayBuffer
+  }
 }
 
 function wait(ms: number) {
@@ -268,7 +299,7 @@ function matchShortTitle(text: string): ShortTitleMatch | null {
     return null
   }
 
-  const chineseMatch = normalized.match(/^([一二三四五六七八九十两]{1,3})[、.．]\s*(.+)$/u)
+  const chineseMatch = normalized.match(/^([一二三四五六七八九十两]{1,3})[、.．]\s*(\S.*)$/u)
   if (chineseMatch) {
     const order = chineseNumeralToNumber(chineseMatch[1])
     const title = normalizeBlockText(chineseMatch[2])
@@ -280,7 +311,7 @@ function matchShortTitle(text: string): ShortTitleMatch | null {
     }
   }
 
-  const namedTitleMatch = normalized.match(/^标题\s*([0-9]{1,2})\s*[:：]\s*(.+)$/u)
+  const namedTitleMatch = normalized.match(/^标题\s*(\d{1,2})\s*[:：]\s*(\S.*)$/u)
   if (namedTitleMatch) {
     return {
       order: Number(namedTitleMatch[1]),
@@ -288,7 +319,7 @@ function matchShortTitle(text: string): ShortTitleMatch | null {
     }
   }
 
-  const dotOrCommaNumberMatch = normalized.match(/^([0-9]{1,2})\s*[.．、]\s*(.+)$/u)
+  const dotOrCommaNumberMatch = normalized.match(/^(\d{1,2})\s*[.．、]\s*(\S.*)$/u)
   if (dotOrCommaNumberMatch) {
     return {
       order: Number(dotOrCommaNumberMatch[1]),
@@ -296,7 +327,7 @@ function matchShortTitle(text: string): ShortTitleMatch | null {
     }
   }
 
-  const blankSeparatedNumberMatch = normalized.match(/^([0-9]{1,2})\s+(.+)$/u)
+  const blankSeparatedNumberMatch = normalized.match(/^(\d{1,2})\s+(\S.*)$/u)
   if (blankSeparatedNumberMatch) {
     return {
       order: Number(blankSeparatedNumberMatch[1]),
@@ -346,6 +377,49 @@ function normalizeTextNodes(root: HTMLElement) {
   }
 }
 
+function preserveParagraphLineBreaks(root: HTMLElement) {
+  const paragraphs = Array.from(root.querySelectorAll(`p`))
+
+  paragraphs.forEach((paragraph) => {
+    const textNodes: Text[] = []
+    const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT)
+    let currentTextNode = walker.nextNode() as Text | null
+
+    while (currentTextNode) {
+      textNodes.push(currentTextNode)
+      currentTextNode = walker.nextNode() as Text | null
+    }
+
+    textNodes.forEach((textNode) => {
+      const rawText = textNode.textContent ?? ``
+      if (!/[\r\n]/.test(rawText)) {
+        return
+      }
+
+      const normalizedText = rawText
+        .replace(/\r\n/g, `\n`)
+        .replace(/[ \t]*\n[ \t]*/g, `\n`)
+      const segments = normalizedText.split(`\n`)
+      if (segments.length <= 1) {
+        return
+      }
+
+      const fragment = paragraph.ownerDocument.createDocumentFragment()
+      segments.forEach((segment, index) => {
+        if (index > 0) {
+          fragment.append(paragraph.ownerDocument.createElement(`br`))
+        }
+
+        if (segment) {
+          fragment.append(paragraph.ownerDocument.createTextNode(segment))
+        }
+      })
+
+      textNode.replaceWith(fragment)
+    })
+  })
+}
+
 function unwrapSectionElements(root: HTMLElement) {
   const sections = Array.from(root.querySelectorAll(`section`))
   sections.forEach((section) => {
@@ -370,14 +444,17 @@ function isWordStyleNoise(text: string, html: string = ``) {
   const lowerText = normalizedText.toLowerCase()
   const lowerHtml = stripWordStyleFragments(html).toLowerCase()
 
-  const isSectionTagOnly = /^<\s*\/?\s*section\b[^>]*>$/i.test(normalizedText)
-    || /^&lt;\s*\/?\s*section\b.*&gt;$/i.test(normalizedText)
+  const isSectionTagOnly = lowerText === `<section>` || lowerText === `</section>`
+    || lowerText === `&lt;section&gt;` || lowerText === `&lt;/section&gt;`
   const looksLikeTagString = /^<[^>]+>$/.test(normalizedText) || /^&lt;[^>]+&gt;$/i.test(normalizedText)
-  const startsWithSectionTag = /^(&lt;|<)\s*\/?\s*section\b/.test(lowerText)
-  const hasStyleKeywords = /(pingfangsc|word-break|word-wrap|letter-spacing|font-size|line-height|overflow-x|text-align|font-family|rgb\(|margin-|padding)/.test(lowerText)
-  const hasMalformedAttributes = (normalizedText.match(/=\"\"/g)?.length ?? 0) >= 2
+  const startsWithSectionTag = lowerText.startsWith(`<section`)
+    || lowerText.startsWith(`</section`)
+    || lowerText.startsWith(`&lt;section`)
+    || lowerText.startsWith(`&lt;/section`)
+  const hasStyleKeywords = /pingfangsc|word-break|word-wrap|letter-spacing|font-size|line-height|overflow-x|text-align|font-family|rgb\(|margin-|padding/.test(lowerText)
+  const hasMalformedAttributes = normalizedText.split(`=""`).length - 1 >= 2
   const hasSectionMarker = lowerText.includes(`<section`) || lowerText.includes(`&lt;section`)
-  const hasCjkChars = /[\u3400-\u9fff]/u.test(normalizedText)
+  const hasCjkChars = /[\u3400-\u9FFF]/u.test(normalizedText)
   const escapedSectionInHtml = lowerHtml.includes(`&lt;section`) || lowerHtml.includes(`&lt;/section`)
   const likelyBrokenSectionStyleText = hasSectionMarker && hasStyleKeywords && !hasCjkChars
 
@@ -419,7 +496,7 @@ function extractImageHtmlFromParagraph(element: Element) {
 
 function isImageCaptionText(text: string) {
   const normalized = normalizeBlockText(text)
-  return /^(图注|图源|来源|数据来源)\s*[:：]/u.test(normalized)
+  return /^(?:图注|图源|来源|数据来源)\s*[:：]/u.test(normalized)
 }
 
 function buildImageCaptionHtml(content: string) {
@@ -428,6 +505,55 @@ function buildImageCaptionHtml(content: string) {
     .replace(/(\s|&nbsp;|<br\s*\/?>)+$/gi, ``)
     .trim()
   return `<p style="text-align: center; font-size: 14px; line-height: 1.6; color: rgba(0, 0, 0, 0.55); margin: 0 0 8px; padding: 0;">${cleanedContent}</p>`
+}
+
+function restoreDialogueParagraphStructure(element: Element) {
+  const strongElements = Array.from(element.querySelectorAll(`strong`))
+  const speakerLabelPattern = /[^\s：:]{1,12}[：:]/gu
+
+  strongElements.forEach((strongElement) => {
+    if (strongElement.querySelector(`br`)) {
+      return
+    }
+
+    const normalizedText = normalizeInlineSpaces(strongElement.textContent ?? ``)
+      .replace(/\s+/g, ` `)
+      .trim()
+    const speakerMatches = Array.from(normalizedText.matchAll(speakerLabelPattern))
+    if (speakerMatches.length < 2) {
+      return
+    }
+
+    const lastSpeakerMatch = speakerMatches.at(-1)
+    if (!lastSpeakerMatch || lastSpeakerMatch.index == null || lastSpeakerMatch.index <= 0) {
+      return
+    }
+
+    const questionText = normalizedText.slice(0, lastSpeakerMatch.index).trim()
+    const answerSpeakerText = normalizedText.slice(lastSpeakerMatch.index).trim()
+    if (!questionText || !answerSpeakerText) {
+      return
+    }
+    if (!/[。！？!?]$/.test(questionText)) {
+      return
+    }
+    if (answerSpeakerText !== lastSpeakerMatch[0]) {
+      return
+    }
+
+    const doc = strongElement.ownerDocument
+    const questionStrong = doc.createElement(`strong`)
+    questionStrong.textContent = questionText
+
+    const answerSpeakerStrong = doc.createElement(`strong`)
+    answerSpeakerStrong.textContent = answerSpeakerText
+
+    strongElement.replaceWith(
+      questionStrong,
+      doc.createElement(`br`),
+      answerSpeakerStrong,
+    )
+  })
 }
 
 function serializeBlockElement(element: Element, fallbackOrderRef: { value: number }) {
@@ -447,7 +573,9 @@ function serializeBlockElement(element: Element, fallbackOrderRef: { value: numb
   }
 
   if (tagName === `p`) {
-    const innerHtml = stripWordStyleFragments(element.innerHTML).trim()
+    const paragraphClone = element.cloneNode(true) as Element
+    restoreDialogueParagraphStructure(paragraphClone)
+    const innerHtml = stripWordStyleFragments(paragraphClone.innerHTML).trim()
     if (!innerHtml || isWordStyleNoise(normalizedText, innerHtml)) {
       return ``
     }
@@ -465,7 +593,12 @@ function serializeBlockElement(element: Element, fallbackOrderRef: { value: numb
   }
 
   if (/^h[1-6]$/.test(tagName)) {
-    return `<${tagName}>${element.innerHTML.trim()}</${tagName}>`
+    const headingLevel = Number(tagName.slice(1))
+    const headingText = normalizeBlockText(stripWordStyleFragments(element.textContent ?? ``))
+    if (!headingText) {
+      return ``
+    }
+    return `${`#`.repeat(headingLevel)} ${headingText}`
   }
 
   return element.outerHTML.trim()
@@ -480,6 +613,7 @@ function normalizeWordHtml(html: string) {
   unwrapSectionElements(root)
   removeWordPlaceholderAnchors(root)
   normalizeTextNodes(root)
+  preserveParagraphLineBreaks(root)
 
   const fallbackOrderRef = { value: 1 }
   const parts: string[] = []
@@ -516,7 +650,6 @@ function normalizeWordHtml(html: string) {
 
   return parts
     .join(`\n\n`)
-    .replace(/<\/strong>\s*<strong>/g, ``)
     .replace(/\n{3,}/g, `\n\n`)
     .trim()
 }
@@ -568,8 +701,9 @@ export function useImportWordContent() {
           return
         }
 
+        const normalizedArrayBuffer = await normalizeDocxLineBreaks(arrayBuffer, file.name)
         const result = await mammoth.convertToHtml(
-          { arrayBuffer },
+          { arrayBuffer: normalizedArrayBuffer },
           {
             styleMap: [
               `b => strong`,

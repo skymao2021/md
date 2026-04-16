@@ -16,6 +16,7 @@ const isNetlify = process.env.SERVER_ENV === `NETLIFY`
 const isUTools = process.env.SERVER_ENV === `UTOOLS`
 const isCfWorkers = process.env.CF_WORKERS === `1`
 const isCfPages = process.env.CF_PAGES === `1`
+const isOrbStackLocal = process.env.SERVER_ENV === `ORBSTACK_LOCAL`
 const enableVueDevTools = process.env.ENABLE_VUE_DEVTOOLS === `1`
 
 const base = isNetlify || isCfWorkers || isCfPages ? `/` : isUTools ? `./` : `/`
@@ -24,7 +25,7 @@ export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, process.cwd())
 
   const vueDevToolsPlugin = enableVueDevTools
-    ? (await import('vite-plugin-vue-devtools')).default({
+    ? (await import(`vite-plugin-vue-devtools`)).default({
         launchEditor: env.VITE_LAUNCH_EDITOR ?? `code`,
       })
     : null
@@ -38,7 +39,7 @@ export default defineConfig(async ({ mode }) => {
       isCfWorkers && cloudflare(),
       tailwindcss(),
       vueDevToolsPlugin,
-      ...(!isUTools
+      ...(!isUTools && !isOrbStackLocal
         ? [
             VitePWA({
               registerType: `autoUpdate`,
