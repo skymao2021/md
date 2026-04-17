@@ -244,10 +244,10 @@ export function solveWeChatImage() {
     image.removeAttribute(`width`)
     image.removeAttribute(`height`)
     if (width) {
-      image.style.width = /^\d+(\.\d+)?$/.test(width) ? `${width}px` : width
+      image.style.width = /^\d+(?:\.\d+)?$/.test(width) ? `${width}px` : width
     }
     if (height) {
-      image.style.height = /^\d+(\.\d+)?$/.test(height) ? `${height}px` : height
+      image.style.height = /^\d+(?:\.\d+)?$/.test(height) ? `${height}px` : height
     }
   })
 }
@@ -272,6 +272,78 @@ function mergeCss(html: string): string {
   return juice(html, {
     inlinePseudoElements: true,
     preserveImportant: true,
+  })
+}
+
+const WECHAT_BASE_TEXT_STYLES: Record<string, string> = {
+  'font-family': `"PingFangSC-Light", "PingFang SC", system-ui, -apple-system, "Hiragino Sans GB", "Microsoft YaHei", sans-serif`,
+  'font-size': `17px`,
+  'line-height': `1.75`,
+  color: `rgba(0, 0, 0, 0.9)`,
+  'letter-spacing': `0.544px`,
+  'word-break': `break-word`,
+  'overflow-wrap': `break-word`,
+}
+
+const WECHAT_HEADING_STYLES: Record<string, Record<string, string>> = {
+  H1: {
+    'font-size': `24px`,
+    'font-weight': `700`,
+    'text-align': `center`,
+    margin: `1.2em 0 0.8em`,
+  },
+  H2: {
+    'font-size': `20px`,
+    'font-weight': `700`,
+    'text-align': `left`,
+    margin: `1.2em 0 0.8em`,
+  },
+  H3: {
+    'font-size': `18px`,
+    'font-weight': `700`,
+    'text-align': `left`,
+    margin: `1em 0 0.6em`,
+  },
+}
+
+function setStyleIfMissing(element: HTMLElement, property: string, value: string) {
+  if (!element.style.getPropertyValue(property)) {
+    element.style.setProperty(property, value)
+  }
+}
+
+function shouldSkipTypographyNormalization(element: HTMLElement): boolean {
+  return Boolean(
+    element.closest(`pre, code, table, thead, tbody, tr, td, th, svg, .nodeLabel, .edgeLabel`)
+    || element.querySelector(`pre, code, table, svg, .nodeLabel, .edgeLabel, img`),
+  )
+}
+
+function stabilizeWeChatTypography(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>(`p, li, blockquote, h1, h2, h3, h4, h5, h6`).forEach((element) => {
+    if (shouldSkipTypographyNormalization(element)) {
+      return
+    }
+
+    Object.entries(WECHAT_BASE_TEXT_STYLES).forEach(([property, value]) => {
+      setStyleIfMissing(element, property, value)
+    })
+
+    if (element.tagName === `P` || element.tagName === `LI`) {
+      setStyleIfMissing(element, `margin`, `0.6em 0`)
+      setStyleIfMissing(element, `text-align`, `left`)
+    }
+
+    if (element.tagName === `BLOCKQUOTE`) {
+      setStyleIfMissing(element, `margin`, `1em 0`)
+    }
+
+    const headingStyles = WECHAT_HEADING_STYLES[element.tagName]
+    if (headingStyles) {
+      Object.entries(headingStyles).forEach(([property, value]) => {
+        setStyleIfMissing(element, property, value)
+      })
+    }
   })
 }
 
@@ -323,6 +395,9 @@ export async function processClipboardContent(primaryColor: string) {
       /<span class="edgeLabel"([^>]*)><p[^>]*>(.*?)<\/p><\/span>/g,
       `<span class="edgeLabel"$1>$2</span>`,
     )
+
+  // 把正文基线样式补到会被微信长期保留的块级节点上，避免只依赖最外层容器。
+  stabilizeWeChatTypography(clipboardDiv)
 
   // 处理图片大小
   solveWeChatImage()

@@ -19,6 +19,21 @@ WORKDIR /usr/share/nginx/html
 
 COPY --from=builder /app/apps/web/dist/ ./
 
+# Force-remove any previously registered local service worker on this origin.
+RUN printf '%s\n' \
+  "self.addEventListener('install', () => self.skipWaiting())" \
+  "self.addEventListener('activate', event => {" \
+  "  event.waitUntil((async () => {" \
+  "    const keys = await caches.keys()" \
+  "    await Promise.all(keys.map(key => caches.delete(key)))" \
+  "    await self.registration.unregister()" \
+  "    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })" \
+  "    clients.forEach(client => client.navigate(client.url))" \
+  "  })())" \
+  "})" \
+  "self.addEventListener('fetch', () => {})" \
+  > /usr/share/nginx/html/sw.js
+
 # Ensure SPA routes fallback to index.html
 RUN printf '%s\n' \
   'server {' \
@@ -28,7 +43,17 @@ RUN printf '%s\n' \
   '  root /usr/share/nginx/html;' \
   '  index index.html;' \
   '' \
+  '  location = /sw.js {' \
+  '    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";' \
+  '    try_files /sw.js =404;' \
+  '  }' \
+  '' \
+  '  location = /index.html {' \
+  '    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";' \
+  '  }' \
+  '' \
   '  location / {' \
+  '    add_header Cache-Control "no-store";' \
   '    try_files $uri $uri/ /index.html;' \
   '  }' \
   '}' > /etc/nginx/conf.d/default.conf

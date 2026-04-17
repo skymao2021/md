@@ -22,6 +22,7 @@ Use this skill to standardize the full workflow from Word file to publish-ready 
 3. Stable CSS template for article layout.
 4. Stable image upload output (image visible in editor and after WeChat paste).
 5. Local OrbStack deployment commands and scripts.
+6. Stable WeChat paste typography that does not drift after WeChat reprocesses the pasted HTML.
 
 ## Workflow
 
@@ -78,6 +79,16 @@ Render short-title as block layout (not flex) to avoid WeChat paste misalignment
 2. Apply in doocs/md right-side CSS panel.
 3. Keep this style stable unless user explicitly asks for redesign.
 
+### Step 4.5: WeChat copy stabilization
+
+Primary file: `apps/web/src/utils/index.ts`
+
+1. Do not pollute the left editor source just to mimic preview typography.
+2. Stabilize the copied HTML in `processClipboardContent`, not the imported source content.
+3. After CSS is merged for clipboard output, make sure core typography is present on WeChat-stable block nodes such as `p`, `li`, `blockquote`, and headings.
+4. Treat container-only typography as unsafe for long-term WeChat rendering; WeChat may keep the initial appearance, then rewrite/sanitize the wrapper and degrade the layout later.
+5. Skip code blocks, tables, SVG/Mermaid regions, and image wrappers when applying fallback typography so specialized rendering is not damaged.
+
 ### Step 5: Image-bed configuration
 
 1. Follow `references/image-bed-setup.md`.
@@ -104,6 +115,7 @@ After a Word import, verify all items:
 6. Word import never leaves mixed image sources in one article: either all embedded images become remote URLs, or the import is blocked with an error.
 7. Left editor content stays readable and editable: no mass inline `style="..."` on ordinary paragraphs.
 8. Interview content keeps separate speaker structure, for example `崔大宝：...` and `潘飞：...` must not be merged into one `<strong>` block.
+9. After copying into WeChat, article typography stays stable over time: no delayed loss of `line-height`, font size, or paragraph spacing after WeChat finishes its own cleanup.
 
 ## File references in this skill
 
