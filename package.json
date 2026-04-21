@@ -28,8 +28,8 @@
     "utools:package": "node ./scripts/package-utools.mjs"
   },
   "dependencies": {
-    "@codemirror/state": "^6.5.2",
-    "@codemirror/view": "^6.38.6"
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.41.1"
   },
   "devDependencies": {
     "@antfu/eslint-config": "5.4.1",
