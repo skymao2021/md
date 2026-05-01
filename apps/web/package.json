@@ -54,7 +54,7 @@
     "isomorphic-dompurify": "^2.29.0",
     "jszip": "^3.10.1",
     "juice": "^11.0.3",
-    "lucide-vue-next": "^0.545.0",
+    "lucide-vue-next": "^1.0.0",
     "mammoth": "^1.8.0",
     "marked": "^16.4.0",
     "node-fetch": "^3.3.2",
