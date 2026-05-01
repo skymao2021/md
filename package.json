@@ -23,6 +23,7 @@
     "release:cli": "node ./scripts/release.js",
     "lint": "eslint . --fix",
     "type-check": "vue-tsc --build --force",
+    "deps:refresh-browser-data": "pnpm up -r baseline-browser-mapping browserslist",
     "postinstall": "simple-git-hooks",
     "inspector": "pnpx node-modules-inspector",
     "utools:package": "node ./scripts/package-utools.mjs"
@@ -35,6 +36,7 @@
     "@antfu/eslint-config": "5.4.1",
     "@types/node": "^24.7.2",
     "archiver": "^7.0.1",
+    "baseline-browser-mapping": "^2.10.19",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",
     "eslint-plugin-format": "^1.0.2",
@@ -57,6 +59,6 @@
     "pre-commit": "npx lint-staged"
   },
   "lint-staged": {
-    "*": "eslint --fix"
+    "*.{js,cjs,mjs,ts,tsx,vue}": "eslint --fix"
   }
 }

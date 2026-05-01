@@ -43,7 +43,8 @@ Primary file: `apps/web/src/composables/index.ts`
 6. Convert image paragraphs to centered image HTML that is stable in WeChat:
    - image paragraph margin bottom `8px`
    - image block no extra top/bottom blank line
-7. Convert figure captions (`图源/图注/来源/数据来源`) to centered caption with paragraph bottom `8px`.
+7. Convert figure captions (`图/图源/图注/图片来源/来源/数据来源`) to centered caption with paragraph bottom `8px`.
+   - If a Word file has no caption prefix, treat only the first short, non-heading paragraph immediately after an image as an implicit caption.
 8. Upload embedded Word images before final import, and retry each image upload on transient failure.
 9. If any embedded image still remains as `data:` after upload attempts, abort the whole import instead of inserting mixed content into the editor.
 10. Keep the left editor source clean:
@@ -52,6 +53,8 @@ Primary file: `apps/web/src/composables/index.ts`
 - keep normal text as clean Markdown/HTML-compatible content, and let the right-side theme CSS control typography
 
 11. Never merge adjacent `</strong><strong>` boundaries during cleanup, otherwise interview question/answer blocks may collapse into one bold segment.
+12. If Word incorrectly marks long body paragraphs as heading styles, demote those long heading tags back to normal paragraphs instead of converting them to Markdown `##` headings.
+    - Preserve likely paragraph lead emphasis for demoted heading paragraphs that start with transition labels such as `首先/其次/如何`.
 
 ### Step 3: Short-title icon blocks
 

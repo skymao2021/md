@@ -279,7 +279,7 @@ const WECHAT_BASE_TEXT_STYLES: Record<string, string> = {
   'font-family': `"PingFangSC-Light", "PingFang SC", system-ui, -apple-system, "Hiragino Sans GB", "Microsoft YaHei", sans-serif`,
   'font-size': `17px`,
   'line-height': `1.75`,
-  color: `rgba(0, 0, 0, 0.9)`,
+  'color': `rgba(0, 0, 0, 0.9)`,
   'letter-spacing': `0.544px`,
   'word-break': `break-word`,
   'overflow-wrap': `break-word`,
@@ -290,19 +290,19 @@ const WECHAT_HEADING_STYLES: Record<string, Record<string, string>> = {
     'font-size': `24px`,
     'font-weight': `700`,
     'text-align': `center`,
-    margin: `1.2em 0 0.8em`,
+    'margin': `1.2em 0 0.8em`,
   },
   H2: {
     'font-size': `20px`,
     'font-weight': `700`,
     'text-align': `left`,
-    margin: `1.2em 0 0.8em`,
+    'margin': `1.2em 0 0.8em`,
   },
   H3: {
     'font-size': `18px`,
     'font-weight': `700`,
     'text-align': `left`,
-    margin: `1em 0 0.6em`,
+    'margin': `1em 0 0.6em`,
   },
 }
 

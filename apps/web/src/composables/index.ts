@@ -67,6 +67,14 @@ function normalizeBlockText(text: string) {
   return normalizeInlineSpaces(text).replace(/\s+/g, ` `).trim()
 }
 
+function escapeHtmlText(text: string) {
+  return text
+    .replace(/&/g, `&amp;`)
+    .replace(/</g, `&lt;`)
+    .replace(/>/g, `&gt;`)
+    .replace(/"/g, `&quot;`)
+}
+
 function stripWordStyleFragments(input: string) {
   let output = input
   const markers = [`<section`, `&lt;section`]
@@ -496,7 +504,50 @@ function extractImageHtmlFromParagraph(element: Element) {
 
 function isImageCaptionText(text: string) {
   const normalized = normalizeBlockText(text)
-  return /^(?:图注|图源|来源|数据来源)\s*[:：]/u.test(normalized)
+  return /^(?:图|图注|图源|图片来源|来源|数据来源)\s*[:：]/u.test(normalized)
+}
+
+function isLikelyImplicitImageCaption(text: string) {
+  const normalized = normalizeBlockText(text)
+  if (!normalized || normalized.length > 60) {
+    return false
+  }
+  if (matchShortTitle(normalized)) {
+    return false
+  }
+  if (/^(?:首先|其次|此外|因此|同时|目前|近日|近年来|时值|活动期间|依托|深耕|本次|这场|[该为在从据])/u.test(normalized)) {
+    return false
+  }
+  return !/[。！？!?；;]$/u.test(normalized)
+}
+
+function shouldDemoteHeadingToParagraph(tagName: string, text: string) {
+  if (!/^h[2-6]$/.test(tagName)) {
+    return false
+  }
+
+  const normalized = normalizeBlockText(text)
+  if (!normalized || matchShortTitle(normalized)) {
+    return false
+  }
+
+  return normalized.length > 48 || /[。；;]/u.test(normalized)
+}
+
+function shouldEmphasizeDemotedHeadingLead(text: string) {
+  return /^(?:首先|其次|再次|最后|如何|一是|二是|三是|四是|第一|第二|第三|第四)/u.test(text)
+}
+
+function buildDemotedHeadingHtml(text: string) {
+  const normalized = normalizeBlockText(text)
+  const sentenceEndIndex = normalized.search(/[。！？!?]/u)
+  if (sentenceEndIndex <= 0 || !shouldEmphasizeDemotedHeadingLead(normalized)) {
+    return escapeHtmlText(normalized)
+  }
+
+  const lead = normalized.slice(0, sentenceEndIndex + 1)
+  const rest = normalized.slice(sentenceEndIndex + 1)
+  return `<strong>${escapeHtmlText(lead)}</strong>${escapeHtmlText(rest)}`
 }
 
 function buildImageCaptionHtml(content: string) {
@@ -556,7 +607,11 @@ function restoreDialogueParagraphStructure(element: Element) {
   })
 }
 
-function serializeBlockElement(element: Element, fallbackOrderRef: { value: number }) {
+function serializeBlockElement(
+  element: Element,
+  fallbackOrderRef: { value: number },
+  importState: { previousBlockWasImage: boolean },
+) {
   const tagName = element.tagName.toLowerCase()
   const normalizedText = normalizeBlockText(stripWordStyleFragments(element.textContent ?? ``))
   const containsMedia = hasMediaContent(element)
@@ -569,6 +624,7 @@ function serializeBlockElement(element: Element, fallbackOrderRef: { value: numb
   if (shortTitle?.title) {
     const order = shortTitle.order && shortTitle.order > 0 ? shortTitle.order : fallbackOrderRef.value
     fallbackOrderRef.value = Math.max(fallbackOrderRef.value + 1, order + 1)
+    importState.previousBlockWasImage = false
     return createShortTitleElement(element.ownerDocument, shortTitle.title, order).outerHTML
   }
 
@@ -580,15 +636,19 @@ function serializeBlockElement(element: Element, fallbackOrderRef: { value: numb
       return ``
     }
 
-    if (isImageCaptionText(normalizedText)) {
+    const hasStrongText = !!paragraphClone.querySelector(`strong,b`)
+    if (isImageCaptionText(normalizedText) || (importState.previousBlockWasImage && !hasStrongText && isLikelyImplicitImageCaption(normalizedText))) {
+      importState.previousBlockWasImage = false
       return buildImageCaptionHtml(innerHtml)
     }
 
     const imageHtml = extractImageHtmlFromParagraph(element)
     if (imageHtml) {
+      importState.previousBlockWasImage = true
       return imageHtml
     }
 
+    importState.previousBlockWasImage = false
     return innerHtml
   }
 
@@ -598,9 +658,15 @@ function serializeBlockElement(element: Element, fallbackOrderRef: { value: numb
     if (!headingText) {
       return ``
     }
+    if (shouldDemoteHeadingToParagraph(tagName, headingText)) {
+      importState.previousBlockWasImage = false
+      return buildDemotedHeadingHtml(headingText)
+    }
+    importState.previousBlockWasImage = false
     return `${`#`.repeat(headingLevel)} ${headingText}`
   }
 
+  importState.previousBlockWasImage = false
   return element.outerHTML.trim()
 }
 
@@ -616,6 +682,7 @@ function normalizeWordHtml(html: string) {
   preserveParagraphLineBreaks(root)
 
   const fallbackOrderRef = { value: 1 }
+  const importState = { previousBlockWasImage: false }
   const parts: string[] = []
 
   for (const node of Array.from(root.childNodes)) {
@@ -635,7 +702,7 @@ function normalizeWordHtml(html: string) {
     const tagName = element.tagName.toLowerCase()
 
     if (BLOCK_TAG_NAMES.has(tagName)) {
-      const block = serializeBlockElement(element, fallbackOrderRef)
+      const block = serializeBlockElement(element, fallbackOrderRef, importState)
       if (block) {
         parts.push(block)
       }
