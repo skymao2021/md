@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "5.4.1",
-    "@types/node": "^24.7.2",
+    "@types/node": "^25.6.0",
     "archiver": "^7.0.1",
     "baseline-browser-mapping": "^2.10.19",
     "cross-env": "^10.1.0",
